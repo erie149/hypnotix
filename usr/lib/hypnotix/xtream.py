@@ -25,9 +25,9 @@ import time
 from os import path as osp
 from os import makedirs
 from timeit import default_timer as timer  # Timing xtream json downloads
-from typing import List, Tuple
+from typing import List, Mapping, Tuple
 
-import requests
+import requests as req
 
 
 class Channel:
@@ -39,6 +39,7 @@ class Channel:
     group_title = ""
     title = ""
     url = ""
+    info = ""
 
     # XTream
     stream_type = ""
@@ -256,7 +257,8 @@ class XTream:
     server = ""
     username = ""
     password = ""
-
+    reqHeaders = ""
+    
     live_type = "Live"
     vod_type = "VOD"
     series_type = "Series"
@@ -268,7 +270,8 @@ class XTream:
     channels = []
     series = []
     movies = []
-
+    #reqSession = req.Session();
+    #reqSession.headers = {"User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"};
     state = {"authenticated": False, "loaded": False}
 
     hide_adult_content = False
@@ -316,6 +319,9 @@ class XTream:
         self.name = provider_name
         self.cache_path = cache_path
         self.hide_adult_content = hide_adult_content
+        self.reqHeaders = {"User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"}
+        
+        print(self.cache_path)
 
         # if the cache_path is specified, test that it is a directory
         if self.cache_path != "":
@@ -327,6 +333,7 @@ class XTream:
         # If the cache_path is still empty, use default
         if self.cache_path == "":
             self.cache_path = osp.expanduser("~/.xtream-cache/")
+            print(self.cache_path)
             if not osp.isdir(self.cache_path):
                 makedirs(self.cache_path, exist_ok=True)
 
@@ -429,9 +436,11 @@ class XTream:
             self.auth_data = {}
             try:
                 # Request authentication, wait 4 seconds maximum
-                r = requests.get(self.get_authenticate_URL(), timeout=(4))
+                r = req.get(self.get_authenticate_URL(), headers=self.reqHeaders,timeout=(4))
+                print("Authenticating")
                 # If the answer is ok, process data and change state
                 if r.ok:
+                    print("Auth OK")
                     self.auth_data = r.json()
                     self.authorization = {
                         "username": self.auth_data["user_info"]["username"],
@@ -440,7 +449,7 @@ class XTream:
                     self.state["authenticated"] = True
                 else:
                     print("Provider `{}` could not be loaded. Reason: `{} {}`".format(self.name, r.status_code, r.reason))
-            except requests.exceptions.ConnectionError:
+            except req.exceptions.ConnectionError:
                 # If connection refused
                 print("{} - Connection refused URL: {}".format(self.name, self.server))
 
@@ -733,7 +742,7 @@ class XTream:
                         )
                         season.episodes[episode_info["title"]] = new_episode_channel
 
-    def _get_request(self, URL: str, timeout: Tuple = (2, 15)):
+    def _get_request(self, URL: str, headers1: Mapping , timeout: Tuple = (2, 15)):
         """Generic GET Request with Error handling
 
         Args:
@@ -744,20 +753,20 @@ class XTream:
             [type]: JSON dictionary of the loaded data, or None
         """
         try:
-            r = requests.get(URL, timeout=timeout)
+            r = req.get(URL, headers={"User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"}, timeout=timeout)
             if r.status_code == 200:
                 return r.json()
 
-        except requests.exceptions.ConnectionError:
+        except req.exceptions.ConnectionError:
             print(" - Connection Error")
 
-        except requests.exceptions.HTTPError:
+        except req.exceptions.HTTPError:
             print(" - HTTP Error")
 
-        except requests.exceptions.TooManyRedirects:
+        except req.exceptions.TooManyRedirects:
             print(" - TooManyRedirects")
 
-        except requests.exceptions.ReadTimeout:
+        except req.exceptions.ReadTimeout:
             print(" - Timeout while loading data")
 
         return None
@@ -782,7 +791,7 @@ class XTream:
         else:
             theURL = ""
 
-        return self._get_request(theURL)
+        return self._get_request(theURL, self.reqHeaders)
 
     # GET Streams
     def _load_streams_from_provider(self, stream_type: str):
@@ -804,7 +813,7 @@ class XTream:
         else:
             theURL = ""
 
-        return self._get_request(theURL)
+        return self._get_request(theURL, self.reqHeaders)
 
     # GET Streams by Category
     def _load_streams_by_category_from_provider(self, stream_type: str, category_id):
@@ -828,7 +837,7 @@ class XTream:
         else:
             theURL = ""
 
-        return self._get_request(theURL)
+        return self._get_request(theURL, self.reqHeaders)
 
     # GET SERIES Info
     def _load_series_info_by_id_from_provider(self, series_id: str):
@@ -840,7 +849,7 @@ class XTream:
         Returns:
             [type]: JSON if successfull, otherwise None
         """
-        return self._get_request(self.get_series_info_URL_by_ID(series_id))
+        return self._get_request(self.get_series_info_URL_by_ID(series_id), self.reqHeaders)
 
     # The seasons array, might be filled or might be completely empty.
     # If it is not empty, it will contain the cover, overview and the air date
